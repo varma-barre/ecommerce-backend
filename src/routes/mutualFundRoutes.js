@@ -8,7 +8,7 @@ const {
     getLatestNav,
     getNavHistory,
     getStoredMutualFunds
-} = require("../controllers/mutualfundController");
+} = require("../controllers/mutualFundController");
 
 
 router.get("/search", searchFunds);
