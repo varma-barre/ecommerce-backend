@@ -10,9 +10,11 @@ const {
     deleteCategory
 } = require("../controllers/categoryController");
 
+const authMiddleware = require("../middleware/authMiddleware");
+
 
 // Create Category
-router.post("/",createCategory);
+router.post("/", authMiddleware, createCategory);
 
 // Get All Categories
 router.get("/", getCategories);
@@ -21,12 +23,10 @@ router.get("/", getCategories);
 router.get("/:id", getCategoryById);
 
 // Update Category
-router.put("/:id", updateCategory);
+router.put("/:id", authMiddleware, updateCategory);
 
 // Delete Category
-router.delete("/:id", deleteCategory);
-
-
+router.delete("/:id", authMiddleware, deleteCategory);
 
 
 module.exports = router;

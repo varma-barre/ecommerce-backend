@@ -6,6 +6,7 @@ const Product = require("../models/Product");
 // =====================================================
 // CREATE ORDER FROM CART
 // =====================================================
+
 const createOrder = async (req, res) => {
     try {
         const { shippingAddress, paymentMethod } = req.body;
@@ -18,9 +19,9 @@ const createOrder = async (req, res) => {
         }
 
         // Validate payment method
-        if (!paymentMethod) {
+        if (!["COD", "UPI", "CARD"].includes(paymentMethod)) {
             return res.status(400).json({
-                message: "Payment method is required"
+                message: "Payment method must be COD, UPI or CARD"
             });
         }
 
@@ -81,9 +82,10 @@ const createOrder = async (req, res) => {
         for (const item of cart.items) {
             const product = await Product.findById(item.product._id);
 
-            product.stock -= item.quantity;
-
-            await product.save();
+            if (product) {
+                product.stock -= item.quantity;
+                await product.save();
+            }
         }
 
         // Create order
@@ -102,7 +104,7 @@ const createOrder = async (req, res) => {
 
         await cart.save();
 
-        // Populate order details
+        // Populate product details
         await order.populate("items.product");
 
         res.status(201).json({
@@ -111,7 +113,7 @@ const createOrder = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Create order error:", error);
 
         res.status(500).json({
             message: "Server error"
@@ -123,13 +125,14 @@ const createOrder = async (req, res) => {
 // =====================================================
 // GET ALL ORDERS OF LOGGED-IN USER
 // =====================================================
+
 const getOrders = async (req, res) => {
     try {
         const orders = await Order.find({
             user: req.user.id
         })
-        .populate("items.product")
-        .sort({ createdAt: -1 });
+            .populate("items.product")
+            .sort({ createdAt: -1 });
 
         res.status(200).json({
             message: "Orders retrieved successfully",
@@ -138,7 +141,7 @@ const getOrders = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Get orders error:", error);
 
         res.status(500).json({
             message: "Server error"
@@ -148,8 +151,9 @@ const getOrders = async (req, res) => {
 
 
 // =====================================================
-// GET SINGLE ORDER
+// GET SINGLE ORDER OF LOGGED-IN USER
 // =====================================================
+
 const getOrderById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -178,7 +182,7 @@ const getOrderById = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Get order error:", error);
 
         res.status(500).json({
             message: "Server error"
@@ -188,8 +192,9 @@ const getOrderById = async (req, res) => {
 
 
 // =====================================================
-// UPDATE ORDER
+// UPDATE ORDER OF LOGGED-IN USER
 // =====================================================
+
 const updateOrder = async (req, res) => {
     try {
         const { id } = req.params;
@@ -223,16 +228,21 @@ const updateOrder = async (req, res) => {
             });
         }
 
+        // Update shipping address
         if (shippingAddress !== undefined) {
-            if (shippingAddress.trim() === "") {
+            if (
+                typeof shippingAddress !== "string" ||
+                shippingAddress.trim() === ""
+            ) {
                 return res.status(400).json({
                     message: "Shipping address cannot be empty"
                 });
             }
 
-            order.shippingAddress = shippingAddress;
+            order.shippingAddress = shippingAddress.trim();
         }
 
+        // Update payment method
         if (paymentMethod !== undefined) {
             if (!["COD", "UPI", "CARD"].includes(paymentMethod)) {
                 return res.status(400).json({
@@ -251,7 +261,7 @@ const updateOrder = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Update order error:", error);
 
         res.status(500).json({
             message: "Server error"
@@ -261,8 +271,9 @@ const updateOrder = async (req, res) => {
 
 
 // =====================================================
-// DELETE / CANCEL ORDER
+// CANCEL ORDER BY LOGGED-IN USER
 // =====================================================
+
 const deleteOrder = async (req, res) => {
     try {
         const { id } = req.params;
@@ -282,6 +293,13 @@ const deleteOrder = async (req, res) => {
         if (!order) {
             return res.status(404).json({
                 message: "Order not found"
+            });
+        }
+
+        // Already cancelled
+        if (order.orderStatus === "cancelled") {
+            return res.status(400).json({
+                message: "Order is already cancelled"
             });
         }
 
@@ -310,13 +328,16 @@ const deleteOrder = async (req, res) => {
 
         await order.save();
 
+        // Populate product information
+        await order.populate("items.product");
+
         res.status(200).json({
             message: "Order cancelled successfully",
             order
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Cancel order error:", error);
 
         res.status(500).json({
             message: "Server error"
@@ -326,8 +347,9 @@ const deleteOrder = async (req, res) => {
 
 
 // =====================================================
-// UPDATE ORDER STATUS
+// UPDATE ORDER STATUS BY ADMIN
 // =====================================================
+
 const updateOrderStatus = async (req, res) => {
     try {
         const { id } = req.params;
@@ -340,7 +362,7 @@ const updateOrderStatus = async (req, res) => {
             });
         }
 
-        // Validate status
+        // Valid statuses
         const validStatuses = [
             "pending",
             "confirmed",
@@ -349,6 +371,7 @@ const updateOrderStatus = async (req, res) => {
             "cancelled"
         ];
 
+        // Validate status
         if (!orderStatus) {
             return res.status(400).json({
                 message: "Order status is required"
@@ -362,10 +385,8 @@ const updateOrderStatus = async (req, res) => {
             });
         }
 
-        const order = await Order.findOne({
-            _id: id,
-            user: req.user.id
-        });
+        // Admin can find ANY order
+        const order = await Order.findById(id);
 
         if (!order) {
             return res.status(404).json({
@@ -387,11 +408,10 @@ const updateOrderStatus = async (req, res) => {
             });
         }
 
-        // If cancelling, restore stock
-        if (
-            orderStatus === "cancelled" &&
-            order.orderStatus !== "cancelled"
-        ) {
+        // If admin cancels the order,
+        // restore the product stock
+        if (orderStatus === "cancelled") {
+
             for (const item of order.items) {
                 const product = await Product.findById(item.product);
 
@@ -402,9 +422,14 @@ const updateOrderStatus = async (req, res) => {
             }
         }
 
+        // Update status
         order.orderStatus = orderStatus;
 
         await order.save();
+
+        // Populate product and user information
+        await order.populate("items.product");
+        await order.populate("user", "name email phone");
 
         res.status(200).json({
             message: "Order status updated successfully",
@@ -412,7 +437,7 @@ const updateOrderStatus = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Update order status error:", error);
 
         res.status(500).json({
             message: "Server error"
@@ -421,11 +446,87 @@ const updateOrderStatus = async (req, res) => {
 };
 
 
+// =====================================================
+// ADMIN - GET ALL ORDERS
+// =====================================================
+
+const getAllOrders = async (req, res) => {
+    try {
+        const orders = await Order.find()
+            .populate("user", "name email phone")
+            .populate("items.product")
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            message: "All orders retrieved successfully",
+            count: orders.length,
+            orders
+        });
+
+    } catch (error) {
+        console.error("Get all orders error:", error);
+
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+};
+
+
+// =====================================================
+// ADMIN - GET SINGLE ORDER
+// =====================================================
+
+const getAdminOrderById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validate ObjectId
+        if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+            return res.status(400).json({
+                message: "Invalid order ID"
+            });
+        }
+
+        const order = await Order.findById(id)
+            .populate("user", "name email phone")
+            .populate("items.product");
+
+        if (!order) {
+            return res.status(404).json({
+                message: "Order not found"
+            });
+        }
+
+        res.status(200).json({
+            message: "Order retrieved successfully",
+            order
+        });
+
+    } catch (error) {
+        console.error("Get admin order error:", error);
+
+        res.status(500).json({
+            message: "Server error"
+        });
+    }
+};
+
+
+// =====================================================
+// EXPORT CONTROLLERS
+// =====================================================
+
 module.exports = {
     createOrder,
     getOrders,
     getOrderById,
     updateOrder,
     deleteOrder,
-    updateOrderStatus
+
+    // Admin
+    updateOrderStatus,
+    getAllOrders,
+    getAdminOrderById
 };
+

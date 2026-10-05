@@ -1,15 +1,22 @@
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 const register = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
+        const { name, email, phone, password } = req.body;
 
         // Check required fields
-        if (!name || !email || !password) {
+        if (!name || !email || !phone || !password) {
             return res.status(400).json({
                 message: "Please provide name, email and password"
+            });
+        }
+ 
+        if (!/^[0-9]{10}$/.test(phone)) {
+            return res.status(400).json({
+                message: "Phone number must be 10 digits"
             });
         }
 
@@ -29,6 +36,7 @@ const register = async (req, res) => {
         const user = await User.create({
             name,
             email,
+            phone,
             password: hashedPassword
         });
 
@@ -83,11 +91,13 @@ const login = async (req, res) => {
         // Create JWT
         const token = jwt.sign(
             {
-                id: user._id
+                id: user._id,
+                role: user.role
             },
             process.env.JWT_SECRET,
             {
-                expiresIn: "1d"
+                expiresIn: "1d",
+                jwtid: crypto.randomUUID()
             }
         );
 
@@ -97,9 +107,12 @@ const login = async (req, res) => {
             user: {
                 id: user._id,
                 name: user.name,
-                email: user.email
+                email: user.email,
+                role: user.role
+}
+                
             }
-        });
+        );
 
     } catch (error) {
         res.status(500).json({

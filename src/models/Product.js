@@ -38,7 +38,12 @@ const productSchema = new mongoose.Schema(
                 message: "Status must be active or inactive"
             },
             default: "active"
-        }
+        },
+        image: {
+        type: String,
+        default: ""
+}
+
     },
     {
         timestamps: true

@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const path = require("path");
 
 const connectDB = require("./src/config/db");
 const authRoutes = require("./src/routes/authRoutes");
@@ -49,6 +50,9 @@ app.use("/api/orders",orderRoutes);
 
 //mutualfund routes
 app.use("/api/mutual-funds", mutualFundRoutes);
+
+//images
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const PORT = process.env.PORT || 5000;
 

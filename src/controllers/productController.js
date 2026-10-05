@@ -1,5 +1,6 @@
 const Product = require("../models/Product");
 
+
 // CREATE PRODUCT
 const createProduct = async (req, res) => {
     try {
@@ -9,7 +10,8 @@ const createProduct = async (req, res) => {
             price,
             category,
             stock,
-            status
+            status,
+            image
         } = req.body;
 
         if (
@@ -30,7 +32,8 @@ const createProduct = async (req, res) => {
             price,
             category,
             stock,
-            status
+            status,
+            image: image || ""
         });
 
         res.status(201).json({
@@ -49,21 +52,38 @@ const createProduct = async (req, res) => {
 
 // GET ALL PRODUCTS
 const getProducts = async (req, res) => {
-    try {
-        const products = await Product.find();
+  try {
 
-        res.status(200).json({
-            message: "Products fetched successfully",
-            count: products.length,
-            products
-        });
+    // Get search text from URL
+    const { search } = req.query;
 
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to fetch products",
-            error: error.message
-        });
+    // MongoDB filter
+    const filter = {};
+
+    // Search by product name
+    if (search && search.trim() !== "") {
+      filter.name = {
+        $regex: search.trim(),
+        $options: "i"
+      };
     }
+
+    const products = await Product.find(filter);
+
+    res.status(200).json({
+      message: "Products fetched successfully",
+      count: products.length,
+      products
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      message: "Failed to fetch products",
+      error: error.message
+    });
+
+  }
 };
 
 
@@ -99,7 +119,9 @@ const updateProduct = async (req, res) => {
             description,
             price,
             category,
-            stock
+            stock,
+            status,
+            image
         } = req.body;
 
         const product = await Product.findById(req.params.id);
@@ -115,6 +137,8 @@ const updateProduct = async (req, res) => {
         if (price !== undefined) product.price = price;
         if (category !== undefined) product.category = category;
         if (stock !== undefined) product.stock = stock;
+        if (status !== undefined) product.status = status;
+        if (image !== undefined) product.image = image; 
 
         await product.save();
 
