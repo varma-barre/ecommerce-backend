@@ -3,9 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 
-// ==========================================
 // REGISTER
-// ==========================================
 const register = async (req, res) => {
     try {
         const { name, email, phone, password } = req.body;
@@ -37,10 +35,7 @@ const register = async (req, res) => {
         const normalizedEmail = email.trim().toLowerCase();
 
         const existingUser = await User.findOne({
-            $or: [
-                { email: normalizedEmail },
-                { phone }
-            ]
+            $or: [{ email: normalizedEmail }, { phone }]
         });
 
         if (existingUser) {
@@ -85,9 +80,7 @@ const register = async (req, res) => {
     }
 };
 
-// ==========================================
 // LOGIN
-// ==========================================
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -98,42 +91,24 @@ const login = async (req, res) => {
             });
         }
 
-        const normalizedEmail = email.trim().toLowerCase();
-
         const user = await User.findOne({
-            email: normalizedEmail
+            email: email.trim().toLowerCase()
         });
 
-        if (!user) {
-            return res.status(401).json({
-                message: "Invalid email or password"
-            });
-        }
-
-        const isPasswordCorrect = await bcrypt.compare(
-            password,
-            user.password
-        );
-
-        if (!isPasswordCorrect) {
+        if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({
                 message: "Invalid email or password"
             });
         }
 
         if (!process.env.JWT_SECRET) {
-            console.error("JWT_SECRET is missing from environment variables");
-
             return res.status(500).json({
                 message: "Authentication configuration error"
             });
         }
 
         const token = jwt.sign(
-            {
-                id: user._id,
-                role: user.role
-            },
+            { id: user._id, role: user.role },
             process.env.JWT_SECRET,
             {
                 expiresIn: "1d",
@@ -161,10 +136,7 @@ const login = async (req, res) => {
     }
 };
 
-// ==========================================
-// GET LOGGED-IN USER PROFILE
-// GET /api/auth/profile
-// ==========================================
+// GET PROFILE
 const getProfile = async (req, res) => {
     try {
         const user = await User.findById(req.user.id)
@@ -189,10 +161,97 @@ const getProfile = async (req, res) => {
     }
 };
 
-// ==========================================
-// UPDATE PROFILE AND DEFAULT ADDRESS
-// PUT /api/auth/profile
-// ==========================================
+// UPDATE NAME ONLY
+const updateProfileName = async (req, res) => {
+    try {
+        const { name } = req.body;
+
+        if (typeof name !== "string" || name.trim().length < 3) {
+            return res.status(400).json({
+                message: "Name must contain at least 3 characters"
+            });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            { $set: { name: name.trim() } },
+            { new: true, runValidators: true }
+        ).select("name email phone role defaultAddress");
+
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found"
+            });
+        }
+
+        return res.status(200).json({
+            message: "Name updated successfully",
+            user
+        });
+    } catch (error) {
+        console.error("Update name error:", error);
+
+        return res.status(500).json({
+            message: "Unable to update name"
+        });
+    }
+};
+
+// UPDATE DEFAULT ADDRESS ONLY
+const updateDefaultAddress = async (req, res) => {
+    try {
+        const { address, city, state, pincode } = req.body;
+
+        if (
+            typeof address !== "string" ||
+            address.trim().length < 5 ||
+            typeof city !== "string" ||
+            city.trim().length < 2 ||
+            typeof state !== "string" ||
+            state.trim().length < 2 ||
+            typeof pincode !== "string" ||
+            !/^[0-9]{6}$/.test(pincode.trim())
+        ) {
+            return res.status(400).json({
+                message: "Please provide a complete and valid delivery address"
+            });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            {
+                $set: {
+                    defaultAddress: {
+                        address: address.trim(),
+                        city: city.trim(),
+                        state: state.trim(),
+                        pincode: pincode.trim()
+                    }
+                }
+            },
+            { new: true, runValidators: true }
+        ).select("name email phone role defaultAddress");
+
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found"
+            });
+        }
+
+        return res.status(200).json({
+            message: "Default address saved successfully",
+            user
+        });
+    } catch (error) {
+        console.error("Save address error:", error);
+
+        return res.status(500).json({
+            message: "Unable to save default address"
+        });
+    }
+};
+
+// OPTIONAL: UPDATE NAME, PHONE AND ADDRESS TOGETHER
 const updateProfile = async (req, res) => {
     try {
         const { name, phone, defaultAddress } = req.body;
@@ -220,35 +279,20 @@ const updateProfile = async (req, res) => {
         }
 
         const address = {
-            address: typeof defaultAddress.address === "string"
-                ? defaultAddress.address.trim()
-                : "",
-            city: typeof defaultAddress.city === "string"
-                ? defaultAddress.city.trim()
-                : "",
-            state: typeof defaultAddress.state === "string"
-                ? defaultAddress.state.trim()
-                : "",
-            pincode: typeof defaultAddress.pincode === "string"
-                ? defaultAddress.pincode.trim()
-                : ""
+            address: String(defaultAddress.address || "").trim(),
+            city: String(defaultAddress.city || "").trim(),
+            state: String(defaultAddress.state || "").trim(),
+            pincode: String(defaultAddress.pincode || "").trim()
         };
 
-        if (address.address.length < 5) {
+        if (
+            address.address.length < 5 ||
+            address.city.length < 2 ||
+            address.state.length < 2 ||
+            !/^[0-9]{6}$/.test(address.pincode)
+        ) {
             return res.status(400).json({
-                message: "Please enter your complete street address"
-            });
-        }
-
-        if (address.city.length < 2 || address.state.length < 2) {
-            return res.status(400).json({
-                message: "Please provide a valid city and state"
-            });
-        }
-
-        if (!/^[0-9]{6}$/.test(address.pincode)) {
-            return res.status(400).json({
-                message: "Pincode must contain exactly 6 digits"
+                message: "Please provide a complete and valid delivery address"
             });
         }
 
@@ -272,10 +316,7 @@ const updateProfile = async (req, res) => {
                     defaultAddress: address
                 }
             },
-            {
-                new: true,
-                runValidators: true
-            }
+            { new: true, runValidators: true }
         ).select("name email phone role defaultAddress");
 
         if (!user) {
@@ -285,7 +326,7 @@ const updateProfile = async (req, res) => {
         }
 
         return res.status(200).json({
-            message: "Profile and default address saved successfully",
+            message: "Profile updated successfully",
             user
         });
     } catch (error) {
@@ -307,5 +348,7 @@ module.exports = {
     register,
     login,
     getProfile,
-    updateProfile
+    updateProfile,
+    updateProfileName,
+    updateDefaultAddress
 };
