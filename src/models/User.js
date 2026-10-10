@@ -1,5 +1,31 @@
 const mongoose = require("mongoose");
 
+const addressSchema = new mongoose.Schema(
+    {
+        address: {
+            type: String,
+            default: "",
+            trim: true
+        },
+        city: {
+            type: String,
+            default: "",
+            trim: true
+        },
+        state: {
+            type: String,
+            default: "",
+            trim: true
+        },
+        pincode: {
+            type: String,
+            default: "",
+            trim: true
+        }
+    },
+    { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
     {
         name: {
@@ -16,12 +42,12 @@ const userSchema = new mongoose.Schema(
             lowercase: true
         },
 
-         phone: {
+        phone: {
             type: String,
             required: true,
             unique: true,
             trim: true
-    },
+        },
 
         password: {
             type: String,
@@ -29,10 +55,15 @@ const userSchema = new mongoose.Schema(
             minlength: 6
         },
 
-         role: {
+        role: {
             type: String,
             enum: ["user", "admin"],
             default: "user"
+        },
+
+        defaultAddress: {
+            type: addressSchema,
+            default: () => ({})
         }
     },
     {
